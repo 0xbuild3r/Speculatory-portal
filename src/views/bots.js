@@ -11,6 +11,13 @@ const BOT = {
   falsifier: { title: 'Falsifier watcher', does: 'fires a registered condition when its machine check holds', fields: [['confirmTicks', 'ticks in a row before firing']] },
 };
 
+/* A switch, not a button that says ON and leaves the state a guess. Read it first: green, knob right =
+ * running; grey, knob left = stopped. Same markup as the console's Automation panel. */
+const sw = (id, on, words, fn) => h('button', {
+  id, class: `switch ${on ? 'on' : 'off'}`, role: 'switch', 'aria-checked': String(on),
+  title: on ? 'running — click to stop it' : 'stopped — click to start it', onclick: (e) => { e.preventDefault(); fn(); },
+}, h('span', { class: 'track' }, h('span', { class: 'knob' })), h('span', { class: 'word' }, on ? words[0] : words[1]));
+
 export async function renderBots(root) {
   const s = await api('/v1/bots');
   const again = () => { root.replaceChildren(); return renderBots(root); };
@@ -19,7 +26,7 @@ export async function renderBots(root) {
   root.appendChild(section('Bots',
     h('p', { class: 'hint' }, 'Default ON. Each bot does what a button in the console does, through the same contract calls; the manual button stays available either way. Turning one off delays the duty — it never changes what is allowed.'),
     h('div', { class: 'row' },
-      h('button', { id: 'toggle-global', class: s.config.global ? 'primary' : '', onclick: (e) => { e.preventDefault(); save({ global: !s.config.global }, 'global switch'); } }, s.config.global ? 'All bots: ON' : 'All bots: OFF'),
+      sw('toggle-global', !!s.config.global, ['all bots running', 'all bots stopped'], () => save({ global: !s.config.global }, 'global switch')),
       h('span', { class: 'dim' }, s.external ? 'running as their own process' : 'running inside the API’s keeper'))));
 
   for (const [name, def] of Object.entries(BOT)) {
@@ -34,7 +41,7 @@ export async function renderBots(root) {
       h('h2', {}, def.title),
       h('p', {}, def.does),
       h('div', { class: 'row' },
-        h('button', { id: `toggle-${name}`, class: c.enabled ? 'primary' : '', onclick: (e) => { e.preventDefault(); save({ [name]: { enabled: !c.enabled } }, def.title + ' switch'); } }, c.enabled ? 'ON' : 'OFF'),
+        sw(`toggle-${name}`, !!c.enabled, ['running', 'stopped'], () => save({ [name]: { enabled: !c.enabled } }, def.title + ' switch')),
         ...inputs.map((i) => i.node),
         h('button', { id: `save-${name}`, onclick: (e) => { e.preventDefault(); save({ [name]: Object.fromEntries(inputs.map((i) => [i.k, Number(i.inp.value)])) }, def.title + ' thresholds'); } }, 'save thresholds')),
       h('div', { class: 'kv' },

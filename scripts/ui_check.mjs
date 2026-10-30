@@ -106,7 +106,18 @@ console.log('ledger: a rule nobody has checked says so');
   ok(/未評価|pass|done|skip|fired/.test(txt), 'each rule shows an evaluation or 未評価');
 }
 
-console.log('bots: thresholds round-trip through the API');
+console.log('bots: the switch shows its state and flips through the API');
+{
+  await go('/bots', 'section.bot');
+  const wasOn = (await get('/v1/bots')).config.expiry.enabled;
+  const shown = await page.evaluate(() => document.querySelector('#toggle-expiry')?.getAttribute('aria-checked'));
+  ok(shown === String(wasOn), 'the expiry switch shows the real state before the click', `${shown} vs ${wasOn}`);
+  await page.click('#toggle-expiry');
+  const flipped = await until(async () => (await get('/v1/bots')).config.expiry.enabled !== wasOn, 15000);
+  ok(flipped, 'clicking it flips the bot through the API');
+  await page.click('#toggle-expiry'); // put it back exactly as it was found
+  await until(async () => (await get('/v1/bots')).config.expiry.enabled === wasOn, 15000);
+}
 {
   await go('/bots', 'section.bot');
   await page.fill('#cfg-rebalance-driftBps', '450');
