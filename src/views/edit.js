@@ -154,11 +154,12 @@ export async function renderEdit(root, vault) {
     doc.watch = { ...(d.watch ?? {}) }; if (fc) doc.watch.falsifier = fc; else delete doc.watch.falsifier;
 
     // 1. the words (content, write-once): a new version gets a new slug
-    let slug = null;
-    for (let n = nth; n < nth + 6 && !slug; n++) {
+    let slug = null, n = nth;
+    while (!slug && n < nth + 20) {
       const tryslug = `${baseSlug}-v${n}`;
-      try { await api('/v1/docs', { slug: tryslug, doc: { ...doc, slug: tryslug, version: n } }); slug = tryslug; }
-      catch (e) { if (!/already published/.test(e.message)) throw e; }
+      if ((await api(`/v1/docs/${tryslug}`)).exists) { n++; continue; }
+      await api('/v1/docs', { slug: tryslug, doc: { ...doc, slug: tryslug, version: n } });
+      slug = tryslug;
     }
     if (!slug) throw new Error('could not find a free version slug');
     note2('doc', `1/4 words saved as ${slug}`, 'ok');
