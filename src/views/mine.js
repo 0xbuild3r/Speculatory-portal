@@ -16,9 +16,10 @@ export async function renderMine(root) {
   const pending = ctx.review.filter((r) => String(r.author ?? '').toLowerCase() === me() && !opened.has(r.specHash.toLowerCase()));
 
   root.appendChild(section('My theses',
-    h('p', { class: 'hint' }, 'Everything one author does, per thesis. Update changes the weights, signals or falsifier wording as a new version that waits for review while the current one keeps running.')));
+    h('p', { class: 'hint' }, 'Everything one author does, per thesis. Update changes the weights, signals or falsifier wording as a new version that waits for review while the current one keeps running.'),
+    h('div', { class: 'row' }, h('a', { class: 'btn primary', id: 'publishNew', href: '#/new' }, 'Publish a thesis'))));
 
-  if (!states.length && !pending.length) root.appendChild(EMPTY('No thesis of yours yet — publish one from the console’s Author tab (or the Live page), then come back to run it from here.'));
+  if (!states.length && !pending.length) root.appendChild(EMPTY(h('span', {}, 'No thesis of yours yet — publish one with the button above, or from the console’s Author tab (or the Live page), then come back to run it from here.')));
 
   for (const s of states) {
     const draft = draftOf(s.vault);

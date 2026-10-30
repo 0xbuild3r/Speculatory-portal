@@ -5,6 +5,7 @@ import { renderStake } from './views/stake.js';
 import { renderReports } from './views/reports.js';
 import { renderLedger } from './views/ledger.js';
 import { renderBots } from './views/bots.js';
+import { renderNew } from './views/new.js';
 
 /* Routes (hash): #/mine · #/bots · #/t/<vault>/edit|stake|reports|ledger   (:id is the fund's vault address) */
 const SCREENS = { edit: renderEdit, stake: renderStake, reports: renderReports, ledger: renderLedger };
@@ -14,6 +15,7 @@ export function parseRoute(hash = location.hash) {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (parts[0] === 't' && /^0x[a-fA-F0-9]{40}$/.test(parts[1] ?? '') && SCREENS[parts[2] ?? 'edit']) return { name: 'thesis', id: parts[1].toLowerCase(), screen: parts[2] ?? 'edit' };
   if (parts[0] === 'bots') return { name: 'bots' };
+  if (parts[0] === 'new') return { name: 'new' };
   return { name: 'mine' };
 }
 
@@ -46,6 +48,7 @@ export async function render() {
   try {
     if (r.name === 'mine') await renderMine(el('main'));
     else if (r.name === 'bots') await renderBots(el('main'));
+    else if (r.name === 'new') await renderNew(el('main'));
     else await SCREENS[r.screen](el('main'), r.id);
   } catch (e) { el('main').innerHTML = `<div class="boot">this view failed to load:<br>${String(e.message).slice(0, 300)}</div>`; log('render: ' + e.message, 'err'); }
 }

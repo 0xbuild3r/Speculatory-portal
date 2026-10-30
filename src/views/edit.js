@@ -12,7 +12,7 @@ import { loadThesis, ownerNote, symOf, chip, ZERO32 } from './shared.js';
 const FEEDS = ['NVDA', 'TSM', 'ETH', 'SPX'];
 const lines = (s) => String(s ?? '').trim();
 
-function checkEditor(initial) {
+export function checkEditor(initial) {
   const on = h('input', { type: 'checkbox' });
   const feed = h('select', {}, ...FEEDS.map((f) => h('option', { value: f }, f)));
   const op = h('select', {}, h('option', { value: 'lt' }, 'falls below'), h('option', { value: 'gt' }, 'rises above'));
@@ -96,10 +96,14 @@ export async function renderEdit(root, vault) {
 
   // The new spec: everything of the old one that must not move (term, fees, dates, cash), with the
   // hashes of what changed. Unchanged words keep the hash the chain already has for them.
+  // A past lockupEnd would revert BadDates on publish (the chain only requires lockupEnd > now and ≤ termEnd),
+  // so an expired one moves forward — that is a restatement, not a relaxation of the terms.
   const newSpec = () => {
     const o = t.spec;
     const wordsSame = (a, b) => lines(a) === lines(b);
     const now = BigInt(state.latestTime || Math.floor(Date.now() / 1000));
+    const lock = (BigInt(o.lockupEnd) > now ? BigInt(o.lockupEnd) : now + 90n * 86400n);
+    const lockupEnd = lock < BigInt(o.termEnd) ? lock : BigInt(o.termEnd) - 1n;
     return {
       specHash: ZERO32, creator: o.creator, benchmarkId: o.benchmarkId,
       claimHash: wordsSame(claim.value, d.claim) ? o.claimHash : keccak(lines(claim.value)),
@@ -110,7 +114,7 @@ export async function renderEdit(root, vault) {
       exposureAssets: [...o.exposureAssets],
       hardMinWeightBps: weightRows.map((w) => Math.round(Number(w.mn.value) * 100)),
       hardMaxWeightBps: weightRows.map((w) => Math.round(Number(w.mx.value) * 100)),
-      allowedCashAssets: [...o.allowedCashAssets], transferPolicy: o.transferPolicy, lockupEnd: o.lockupEnd,
+      allowedCashAssets: [...o.allowedCashAssets], transferPolicy: o.transferPolicy, lockupEnd,
       minFormation: o.minFormation, capacity: o.capacity, creatorCommit: o.creatorCommit, stakeS: o.stakeS,
       evaluationDate: o.evaluationDate, policyBoundsHash: o.policyBoundsHash,
     };

@@ -6,7 +6,7 @@ import { api, read, A, ADDR, state, IDENTITIES, h, short } from '../core.js';
 
 export const me = () => String((IDENTITIES[state.identity] ?? IDENTITIES.authorOne).address).toLowerCase();
 
-const symbols = () => ({
+export const symbols = () => ({
   [ADDR.usdc]: 'USDC', [ADDR.nvda]: 'NVDA', [ADDR.tsm]: 'TSM', [ADDR.aCash]: 'aCash', [ADDR.susds]: 'sUSDS',
   ...(ADDR.perp ? { [ADDR.perp]: 'NVDA2X' } : {}), ...(ADDR.call ? { [ADDR.call]: 'NVDA150C' } : {}),
 });

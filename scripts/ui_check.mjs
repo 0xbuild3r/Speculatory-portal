@@ -204,6 +204,33 @@ console.log('update flow: v2 goes to the review queue, v1 keeps running');
   await page.screenshot({ path: join(OUT, 'mine-after-update.png'), fullPage: true });
 }
 
+console.log('publish: a brand-new thesis is sent from the portal itself');
+{
+  const before = (await get('/v1/review')).length;
+  await actAs('authorOne');
+  let cc = await go('/new', 'main h2');
+  ok(cc.h2 > 0 && !cc.boot, '/new renders', cc.boot);
+  const title = `Portal quick start ${Date.now().toString(36)}`;
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  await page.fill('#ntTitle', title);
+  await page.fill('#ntClaim', 'A claim typed in the portal becomes the hash the chain pins.');
+  await page.fill('#ntFals', 'Three consecutive quarters where the index outperforms the book.');
+  await page.fill('#ntSummary', 'A thesis published from the author portal, queued and approved like any other.');
+  await page.click('#publishThesis');
+  const sent = await until(async () => (await page.locator('#sent').count()) > 0, 90000);
+  ok(sent, 'the three steps ran (words → publish → submit)');
+  const hashShown = (await page.textContent('#newHash')) || '';
+  const newHash = hashShown.match(/0x[0-9a-f]{64}/i)?.[0];
+  ok(Boolean(newHash), 'the published spec hash is shown', hashShown.slice(0, 90));
+  const q = await until(async () => (await get('/v1/review')).find((r) => String(r.specHash).toLowerCase() === String(newHash).toLowerCase()), 30000);
+  ok(q && q.status === 'submitted', 'the new thesis sits in the review queue as submitted', JSON.stringify(q));
+  ok((await get(`/v1/docs/${slug}`)).exists === true, 'its words are saved write-once under its own slug', slug);
+  ok((await get('/v1/review')).length >= before, 'the queue grew — the portal itself decided nothing');
+  await go('/mine', 'section.thesis');
+  const mineTxt = await page.evaluate(() => document.querySelector('main').textContent);
+  ok(mineTxt.includes('Waiting to go Live') && mineTxt.includes('Portal quick start'), '/mine lists it under waiting to go Live');
+}
+
 void apps;
 ok(errors.length === 0, `no console errors (${errors.length})`, errors.slice(0, 5));
 console.log(`\n${passed} passed, ${failed} failed · screenshots in ${OUT}`);
