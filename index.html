@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speculatory Portal — the author's side</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0c'/%3E%3Ccircle cx='32' cy='32' r='13' fill='none' stroke='%23f4f2ee' stroke-width='5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>
+(function () {
+  var t = localStorage.getItem("spec-portal-theme");
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
+<script type="importmap">
+{ "imports": {
+    "viem": "https://esm.sh/viem@2.31.7",
+    "viem/accounts": "https://esm.sh/viem@2.31.7/accounts",
+    "viem/chains": "https://esm.sh/viem@2.31.7/chains"
+} }
+</script>
+</head>
+<body>
+<header>
+  <div class="brand"><b>SPECULATORY</b><span class="dim">portal</span></div>
+  <div class="chain">
+    <input id="rpc" aria-label="RPC URL" spellcheck="false">
+    <input id="api" aria-label="API URL" spellcheck="false" placeholder="API" style="width:230px">
+    <button id="reconnect" class="icon" title="reconnect">↻</button>
+    <span class="badge" id="chainBadge">…</span>
+    <span class="dim" id="blockInfo"></span>
+  </div>
+  <div class="identity">
+    <button id="wallet" class="btn sm" title="sign with your browser wallet instead of the demo identity">Connect wallet</button>
+    <span class="dim">author</span>
+    <select id="identity" aria-label="identity"></select>
+    <span class="dim mono" id="identityAddr"></span>
+    <button class="icon theme" id="theme" title="switch dark or light" aria-label="Switch dark or light">◐</button>
+  </div>
+</header>
+<nav id="tabs">
+  <a href="#/mine" data-r="mine">My theses</a>
+  <a href="#/bots" data-r="bots">Bots</a>
+  <span id="thesisNav"></span>
+</nav>
+<main id="main"><div class="boot">connecting…</div></main>
+<footer>
+  <span class="dim">The portal updates; the console governs. Every action here is the same transaction the Author tab sends — no new trust path. Local demo chain.</span>
+  <button id="logToggle" class="log-toggle">log</button>
+</footer>
+<div id="log" class="log hidden"></div>
+<div id="toast" class="toast hidden"></div>
+<script type="module" src="src/main.js"></script>
+<script>
+  document.getElementById("theme").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    var next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("spec-portal-theme", next);
+  });
+</script>
+</body>
+</html>

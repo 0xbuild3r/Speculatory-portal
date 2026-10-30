@@ -25,12 +25,44 @@ organized *per thesis*, not per role.
 - Every action here is the same transaction the Author tab performs today; the
   portal is a better surface, not a new trust path.
 
+## Run it
+
+```bash
+cd ../Speculatory-backend && bash script/up.sh     # chain :8545, API :8788, bots (this repo's sibling) running
+node scripts/build-data.mjs                         # regenerate src/data.js from ../Speculatory-contracts/out + the manifest
+python3 -m http.server 8792                         # open http://127.0.0.1:8792/#/mine
+```
+
+Identities are the console's demo Authors (the node signs for them); "Connect wallet" signs with a browser wallet instead.
+The API address is the second box in the header (`?api=` / localStorage), same rule as the console.
+
+## What each screen sends
+
+| Screen | Calls (all the same as a human's button) |
+|---|---|
+| `#/mine` | reads only: `/v1/funds`, `/v1/review`, `/v1/bots/targets`, `…/stake`, `…/ledger` |
+| `#/t/:id/edit` | `POST /v1/docs` (the words, write-once, new slug per version) → `ThesisSpecRegistry.publish` (the Author's own transaction; `publishFor` is the Admin's curated-listing variant and needs the Admin key, so the portal does not use it) → `ThesisReview.submit` → `ThesisSpecRegistry.supersede(oldHash, newHash)`. v1 keeps running untouched until the Admin approves v2 in the console. A draft autosaves in the browser. |
+| `#/t/:id/stake` | `MockUSDC.approve`, `ConvictionStake.post / topUp / withdraw / tick` (+ the demo faucet) |
+| `#/t/:id/reports` | `POST /v1/assets/<slug>` (image) and `POST /v1/actions/report` (markdown; images linked as `assets/x.png`) |
+| `#/t/:id/ledger` | `GET /v1/funds/:a/ledger` — “未評価” when nothing has checked a rule yet |
+| `#/bots` | `GET /v1/bots`, `POST /v1/bots/config` (out-of-range numbers are refused, not clamped) |
+
+There is no approve / reject anywhere in this repo.
+
+## Check it
+
+`node scripts/ui_check.mjs` — headless Chromium against the live local stack: every screen of every fund renders with no
+console error, the bot thresholds round-trip, a stake top-up lands, a report with an uploaded image is published and its image
+is served, and the update flow puts v2 in the review queue while v1 stays Live. (`VIEM_VENDOR=<dir>` answers the import map
+offline; `CHROME_PATH` picks the browser.)
+
 ## Layout
 
 ```
 index.html            shell: wallet button, identity, per-thesis nav
-src/core.js           reuse — or a thin fork — of the console's viem plumbing
+src/core.js           a thin fork of the console's viem plumbing (author identities only)
 src/data.js           GENERATED — same generator, same rule
-src/views/*.js        the five screens above
+src/main.js           hash router: #/mine, #/bots, #/t/<vault>/edit|stake|reports|ledger
+src/views/*.js        mine · edit · stake · reports · ledger · bots (+ shared.js)
 scripts/              build-data.mjs, ui_check.mjs (headless, same pattern)
 ```
