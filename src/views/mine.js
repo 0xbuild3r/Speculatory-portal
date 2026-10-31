@@ -39,6 +39,7 @@ export async function renderMine(root) {
       s.next ? h('p', { class: 'hint' }, `A new version (${short(s.next.specHash)}) is ${s.next.status === 'submitted' ? 'waiting in the review queue' : s.next.status}. This one keeps running until it is approved.`) : null,
       h('div', { class: 'row' },
         h('a', { class: 'btn sm primary', href: `#/t/${s.vault}/edit` }, 'Update'),
+        h('a', { class: 'btn sm', href: `#/t/${s.vault}/rebalance` }, 'Rebalance'),
         h('a', { class: 'btn sm', href: `#/t/${s.vault}/stake` }, 'Stake'),
         h('a', { class: 'btn sm', href: `#/t/${s.vault}/reports` }, 'Reports'),
         h('a', { class: 'btn sm', href: `#/t/${s.vault}/ledger` }, 'Rule ledger'))));

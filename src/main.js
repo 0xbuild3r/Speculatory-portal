@@ -4,12 +4,13 @@ import { renderEdit } from './views/edit.js';
 import { renderStake } from './views/stake.js';
 import { renderReports } from './views/reports.js';
 import { renderLedger } from './views/ledger.js';
+import { renderRebalance } from './views/rebalance.js';
 import { renderBots } from './views/bots.js';
 import { renderNew } from './views/new.js';
 
 /* Routes (hash): #/mine · #/bots · #/t/<vault>/edit|stake|reports|ledger   (:id is the fund's vault address) */
-const SCREENS = { edit: renderEdit, stake: renderStake, reports: renderReports, ledger: renderLedger };
-const LABEL = { edit: 'Update', stake: 'Stake', reports: 'Reports', ledger: 'Rule ledger' };
+const SCREENS = { edit: renderEdit, rebalance: renderRebalance, stake: renderStake, reports: renderReports, ledger: renderLedger };
+const LABEL = { edit: 'Update', rebalance: 'Rebalance', stake: 'Stake', reports: 'Reports', ledger: 'Rule ledger' };
 
 export function parseRoute(hash = location.hash) {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);

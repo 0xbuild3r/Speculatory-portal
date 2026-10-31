@@ -43,7 +43,7 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}/index.html?rpc=${encodeURIComponent(RPC)}&api=${encodeURIComponent(API)}`;
 
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const ctx = await browser.newContext({ viewport: { width: 1360, height: 1000 } });
 if (VENDOR) {
   await ctx.route(/https:\/\/esm\.sh\/viem@[\d.]+(\/accounts|\/chains)?(\?.*)?$/, (route) => {
@@ -72,7 +72,22 @@ const go = async (hash, sel = 'main h2') => {
 };
 
 const funds = await get('/v1/funds');
-const two = funds.find((f) => /Balance-Sheet|AI Infra/i.test(f.name)) ?? funds[0];
+// a v2 fund can carry the same title as its v1 — prefer the one with a real book and posted stake behind it
+const cands = funds.filter((f) => /Balance-Sheet|AI Infra/i.test(f.name));
+let two = cands[0] ?? funds[0];
+for (const f of cands) {
+  const st = await get(`/v1/funds/${f.address}/stake`).catch(() => ({}));
+  // a closed stake means the fund's life is over — its top-up reverts; only a live stake proves this fund is still running
+  if ((st.posted ?? 0) > 0 && st.state !== 'closed') { two = f; break; }
+}
+// the ledger test wants a complete thesis story: falsifier AND a signal. Among live funds, prefer the one that registered both.
+for (const f of cands) {
+  if (f.address === two.address) break;
+  const st = await get(`/v1/funds/${f.address}/stake`).catch(() => ({}));
+  if ((st.posted ?? 0) <= 0 || st.state === 'closed') continue;
+  const led = await get(`/v1/funds/${f.address}/ledger`).catch(() => null);
+  if ((led?.rules ?? []).some((r) => r.id === 'S1')) { two = f; break; }
+}
 const apps = funds.find((f) => f.address !== two.address);
 // each fund is its own author's: pick the identity that owns it
 const creatorOf = async (v) => (await get(`/v1/funds/${v}`)).creator.toLowerCase();
@@ -83,7 +98,7 @@ console.log('screens (every fund, every screen)');
 await page.goto(base, { waitUntil: 'domcontentloaded' });
 for (const f of funds) {
   await actAs(await idFor(f.address));
-  for (const s of ['edit', 'stake', 'reports', 'ledger']) {
+  for (const s of ['edit', 'rebalance', 'stake', 'reports', 'ledger']) {
     const c = await go(`/t/${f.address}/${s}`);
     ok(c.h2 > 0 && !c.boot, `/t/${f.address.slice(0, 8)}…/${s} renders (${c.h2} cards)`, c.boot);
     if (f.address === two.address) await page.screenshot({ path: join(OUT, `${s}.png`), fullPage: true });
@@ -259,6 +274,42 @@ console.log('assets: an author can name one the deploy never listed');
     && /on this chain/.test(document.getElementById('waNote')?.textContent || '')), sym), 60000);
   ok(Boolean(seen), 'listing a symbol puts it on the chain and in a book row', sym);
   ok((await get('/v1/assets')).assets.some((a) => a.symbol === sym), 'the asset list says it is listed');
+}
+
+console.log('rebalance: the author dials weights from the portal and the vault confirms');
+{
+  await actAs(await idFor(two.address));
+  let cc = await go(`/t/${two.address}/rebalance`, '#rbSet');
+  ok(cc.h2 > 0 && !cc.boot, '/t/…/rebalance renders', cc.boot);
+  const vals = await page.$$eval('input[id^="rb-in-"]', (els) => els.map((e) => ({ id: e.id, v: Number(e.value) })));
+  ok(vals.length >= 1, 'every asset in the book gets a dial');
+  const pick = vals.find((r) => r.v > 0) ?? vals[0];
+  const bandTxt = await page.textContent('#rb-band-' + pick.id.slice('rb-in-'.length));
+  const lo = Number(bandTxt.match(/([\d.]+)\s*%/)[1]);
+  const next = pick.v > lo ? pick.v - 1 : pick.v + 1;
+  await page.fill('#' + pick.id, String(next));
+  await page.click('#rbSet');
+  await page.waitForTimeout(6000);
+  await go(`/t/${two.address}/rebalance`, '#rbSet');
+  const now = Number(await page.inputValue('#' + pick.id));
+  ok(now === next, `the dial to ${next}% is on the vault (read back after a reload)`, String(now));
+  await page.fill('#' + pick.id, String(pick.v));
+  await page.click('#rbSet');
+  await page.waitForTimeout(6000);
+  await go(`/t/${two.address}/rebalance`, '#rbSet');
+  ok(Number(await page.inputValue('#' + pick.id)) === pick.v, 'and the author can put it back');
+  // a band-busting weight is caught before any transaction goes out
+  const rows = await page.$$eval('input[id^="rb-in-"]', (els) => els.map((e) => {
+    const m = e.closest('tr').querySelector('td[id^="rb-band-"]').textContent.match(/([\d.]+)\s*%\s*[–-]\s*([\d.]+)\s*%/);
+    return { id: e.id, hi: m ? Number(m[2]) : 100 };
+  }));
+  const bust = rows.find((r) => 99 > r.hi) ?? rows[rows.length - 1];
+  await page.fill('#' + bust.id, '99');
+  await page.click('#rbSet');
+  await page.waitForTimeout(1500);
+  const txt = await page.evaluate(() => document.querySelector('main').textContent);
+  ok(/outside the band/.test(txt) || /fix the weights/.test(txt), 'a weight outside the band never reaches the chain');
+  await go(`/t/${two.address}/rebalance`, '#rbSet'); // leave the page as it was found
 }
 
 void apps;
