@@ -7,7 +7,7 @@
  * console — nothing here can decide its own fate.
  */
 import { api, read, write, state, A, ADDR, h, keccak, section, field, run, toast, short, IDENTITIES } from '../core.js';
-import { me, symbols, symOf, ZERO32 } from './shared.js';
+import { me, symbols, symOf, ZERO32, loadAssets, assetOptions, wireAsset } from './shared.js';
 import { checkEditor } from './edit.js';
 
 const pct = (s) => Math.round(parseFloat(s || '0') * 100);
@@ -16,6 +16,7 @@ const toBase64 = (buf) => { let s = ''; const b = new Uint8Array(buf); for (let 
 
 export async function renderNew(root) {
   const KEY = '***';
+  await loadAssets(); // names listed after the deploy are selectable too
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* none */ }
 
@@ -67,18 +68,41 @@ export async function renderNew(root) {
   const minForm = h('input', { id: 'ntMin', value: draft?.minForm ?? '1000', size: 10 });
   const capacity = h('input', { id: 'ntCap', value: draft?.cap ?? '10000000', size: 10 });
 
-  // ---- the book: assets with hard bands ----
-  const opts = Object.entries(symbols()).map(([addr, sym]) => ({ addr, sym }));
+  // ---- the book: assets with hard bands, and a way to name one the world has not listed yet ----
   const assetList = h('div', {});
+  const refreshOpts = () => { for (const r of assetList.querySelectorAll('.weight-row select')) syncOpts(r); };
+  const syncOpts = (sel) => {
+    const want = assetOptions(); const had = sel.value;
+    sel.replaceChildren(...want.map((o) => h('option', { value: o.addr }, o.sym)));
+    if ([...sel.options].some((o) => o.value.toLowerCase() === had.toLowerCase())) sel.value = had;
+  };
   const assetRow = (sym, min, max) => {
-    const sel = h('select', {}, ...opts.map((o) => h('option', { value: o.addr, selected: o.sym === sym }, o.sym)));
+    const sel = h('select', {}, ...assetOptions().map((o) => h('option', { value: o.addr, selected: o.sym === sym }, o.sym)));
+    sel.addEventListener('change', changed);
     const mn = h('input', { type: 'number', step: '0.5', size: 5, value: min, style: 'width:80px' });
     const mx = h('input', { type: 'number', step: '0.5', size: 5, value: max, style: 'width:80px' });
-    for (const x of [sel, mn, mx]) x.addEventListener('input', changed);
+    for (const x of [mn, mx]) x.addEventListener('input', changed);
     const row = h('div', { class: 'weight-row', style: 'margin:4px 0' }, sel, mn, h('span', { class: 'dim' }, '% min  '), mx, h('span', { class: 'dim' }, '% max'));
     row.dataset.kind = 'asset';
     return row;
   };
+  const wireSym = h('input', { id: 'waSym', size: 6, placeholder: 'SYM', style: 'text-transform:uppercase' });
+  const wirePrice = h('input', { id: 'waPrice', type: 'number', step: '0.01', size: 8, placeholder: 'price $' });
+  const wireBtn = h('button', { id: 'waGo', onclick: (e) => { e.preventDefault(); wireIt(); } }, 'list it');
+  const wireNote = h('span', { id: 'waNote', class: 'dim' }, 'a name outside the demo set: the marketplace lists it — token, price feed, market — then it joins the rows above');
+  const wireRow = h('div', { class: 'row', style: 'margin-top:8px' }, h('span', { class: 'dim' }, '+ a new asset:'), wireSym, wirePrice, wireBtn, wireNote);
+  async function wireIt() {
+    const sym = wireSym.value.trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{1,5}$/.test(sym)) { toast('a symbol is 2-6 characters, letters and digits, starting with a letter'); return; }
+    try {
+      const out = await wireAsset(sym, wirePrice.value || 100);
+      refreshOpts();
+      assetList.appendChild(assetRow(out.symbol, 0, 25));
+      wireSym.value = ''; wirePrice.value = '';
+      wireNote.textContent = `${out.symbol} is on this chain${out.existed ? ' — it was already listed' : ''}, in a book row at 0–25%; set the band you want.`;
+      changed();
+    } catch (err) { toast('could not list it: ' + err.message); }
+  }
   for (const w of (draft?.weights ?? [{ sym: 'USDC', min: 0, max: 100 }, { sym: 'NVDA', min: 50, max: 90 }])) assetList.appendChild(assetRow(w.sym, w.min, w.max));
   const bookRows = () => [...assetList.querySelectorAll('.weight-row')].map((r) => ({
     addr: r.querySelector('select').value, sym: symOf(r.querySelector('select').value),
@@ -197,7 +221,8 @@ export async function renderNew(root) {
     h('div', { class: 'row' }, field('benchmark', bench), field('term days', termDays), field('entry window days', entryDays), field('perf fee bps', perf), field('sub fee bps', sub), field('redeem fee bps', redeem)),
     h('div', { class: 'row' }, field('min formation $', minForm), field('capacity $', capacity)),
     h('label', {}, 'the book — the hard band each asset may hold'), assetList,
-    h('div', { class: 'row' }, h('button', { onclick: (e) => { e.preventDefault(); assetList.appendChild(assetRow(opts[1].sym, '10', '40')); changed(); } }, '+ asset'))));
+    h('div', { class: 'row' }, h('button', { onclick: (e) => { e.preventDefault(); assetList.appendChild(assetRow((assetOptions().find((o) => o.sym !== 'USDC') ?? assetOptions()[0]).sym, '10', '40')); changed(); } }, '+ asset')),
+    wireRow));
   root.appendChild(section('Send',
     hashOut,
     h('div', { class: 'row', style: 'margin-top:10px' },

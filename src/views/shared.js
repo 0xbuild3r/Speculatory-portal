@@ -10,7 +10,29 @@ export const symbols = () => ({
   [ADDR.usdc]: 'USDC', [ADDR.nvda]: 'NVDA', [ADDR.tsm]: 'TSM', [ADDR.aCash]: 'aCash', [ADDR.susds]: 'sUSDS',
   ...(ADDR.perp ? { [ADDR.perp]: 'NVDA2X' } : {}), ...(ADDR.call ? { [ADDR.call]: 'NVDA150C' } : {}),
 });
-export const symOf = (addr) => Object.entries(symbols()).find(([a]) => a.toLowerCase() === String(addr).toLowerCase())?.[1] ?? short(addr);
+export const symOf = (addr) => Object.entries(symbols()).find(([a]) => a.toLowerCase() === String(addr).toLowerCase())?.[1]
+  ?? Object.entries(RUNTIME).find(([a]) => a.toLowerCase() === String(addr).toLowerCase())?.[1] ?? short(addr);
+
+/** Names the marketplace listed after the deploy. The chain is the list — /v1/assets is the read,
+ *  /v1/actions/asset is the write, and neither is privileged: same calls, same keys, same button. */
+const RUNTIME = {};
+export async function loadAssets() {
+  try {
+    const d = await api('/v1/assets');
+    const built = new Set(Object.keys(symbols()).map((a) => a.toLowerCase()));
+    for (const a of d.assets || []) if (!built.has(String(a.address).toLowerCase())) RUNTIME[a.address.toLowerCase()] = a.symbol;
+  } catch { /* an offline surface keeps the deploy's set */ }
+  return runtimeAssets();
+}
+export const runtimeAssets = () => Object.entries(RUNTIME).map(([addr, sym]) => ({ addr, sym }));
+/** Options for a book row: the deploy's names first, then everything listed since. */
+export const assetOptions = () => [...Object.entries(symbols()).map(([addr, sym]) => ({ addr, sym })), ...runtimeAssets()];
+
+export async function wireAsset(symbol, price) {
+  const out = await api('/v1/actions/asset', { symbol: String(symbol).toUpperCase(), price: Number(price) });
+  if (out.address) RUNTIME[String(out.address).toLowerCase()] = out.symbol;
+  return out;
+}
 
 export const ZERO32 = '0x' + '0'.repeat(64);
 export const navOf = (f) => Number(f.navPerUnit ?? f.nav?.perUnit ?? 0) / 1e18;

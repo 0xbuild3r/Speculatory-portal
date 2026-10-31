@@ -7,7 +7,7 @@
  * These are the transactions the console’s Author tab sends: publish, ThesisReview.submit, supersede.
  */
 import { api, read, write, state, A, ADDR, h, section, field, run, toast, keccak, short } from '../core.js';
-import { loadThesis, ownerNote, symOf, chip, ZERO32 } from './shared.js';
+import { loadThesis, ownerNote, symOf, chip, ZERO32, loadAssets, assetOptions, wireAsset } from './shared.js';
 
 const FEEDS = ['NVDA', 'TSM', 'ETH', 'SPX'];
 const lines = (s) => String(s ?? '').trim();
@@ -26,6 +26,7 @@ export function checkEditor(initial) {
 
 export async function renderEdit(root, vault) {
   const t = await loadThesis(vault);
+  await loadAssets(); // names listed after the deploy can join the v2 book too
   const draftKey = 'portal-draft:' + vault;
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* none */ }
@@ -60,15 +61,55 @@ export async function renderEdit(root, vault) {
   };
   for (const s of (draft?.signals ?? d.signals ?? [])) addSignal(s);
 
-  // ---- weights ----
+  // ---- weights: the bands may move, and the book may grow — an update that names a new asset lists
+  // it first (same marketplace calls as any new name), so v2's exposure is a superset, never a surprise ----
   const weightRows = t.spec.exposureAssets.map((a, i) => {
     const mn = h('input', { type: 'number', step: '0.5', size: 5, value: String((draft?.weights?.[i]?.min ?? Number(t.spec.hardMinWeightBps[i]) / 100)), style: 'width:80px' });
     const mx = h('input', { type: 'number', step: '0.5', size: 5, value: String((draft?.weights?.[i]?.max ?? Number(t.spec.hardMaxWeightBps[i]) / 100)), style: 'width:80px' });
     mn.addEventListener('input', changed); mx.addEventListener('input', changed);
-    return { asset: a, sym: symOf(a), mn, mx, was: [Number(t.spec.hardMinWeightBps[i]) / 100, Number(t.spec.hardMaxWeightBps[i]) / 100] };
+    return { asset: a, sym: symOf(a), mn, mx, was: [Number(t.spec.hardMinWeightBps[i]) / 100, Number(t.spec.hardMaxWeightBps[i]) / 100], added: false };
   });
-  const weightTable = h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'asset'), h('th', {}, 'min %'), h('th', {}, 'max %'), h('th', {}, 'now'))),
-    h('tbody', {}, ...weightRows.map((w) => h('tr', { 'data-asset': w.sym }, h('td', { class: 'mono' }, w.sym), h('td', {}, w.mn), h('td', {}, w.mx), h('td', { class: 'dim mono' }, `${w.was[0]}–${w.was[1]}`)))));
+  const numIn = (v, fb) => { const el = h('input', { type: 'number', step: '0.5', size: 5, value: String(v ?? fb), style: 'width:80px' }); el.addEventListener('input', changed); return el; };
+  for (const w of (draft?.weights ?? [])) {
+    if (!w.sym || weightRows.some((r) => r.sym === w.sym)) continue;
+    const hit = assetOptions().find((o) => o.sym === w.sym);
+    if (hit) weightRows.push({ asset: hit.addr, sym: hit.sym, mn: numIn(w.min, 5), mx: numIn(w.max, 25), was: null, added: true });
+  }
+  const usedAddrs = () => weightRows.map((w) => String(w.asset).toLowerCase());
+  const weightBody = h('tbody', {});
+  const renderWeights = () => weightBody.replaceChildren(...weightRows.map((w, idx) => {
+    const cell = w.added
+      ? h('td', {}, h('select', {
+        onchange: (e) => { const o = assetOptions().find((x) => x.addr === e.target.value); if (o) { w.asset = o.addr; w.sym = o.sym; changed(); renderWeights(); } },
+      }, ...assetOptions().filter((o) => o.addr.toLowerCase() === w.asset.toLowerCase() || !usedAddrs().includes(o.addr.toLowerCase())).map((o) => h('option', { value: o.addr, selected: o.addr === w.asset }, o.sym))))
+      : h('td', { class: 'mono' }, w.sym);
+    return h('tr', { 'data-asset': w.sym }, cell, h('td', {}, w.mn), h('td', {}, w.mx),
+      h('td', { class: 'dim mono' }, w.was ? `${w.was[0]}–${w.was[1]}` : (w.added ? 'new' : '')),
+      h('td', {}, w.added ? h('button', { class: 'sm', onclick: (e) => { e.preventDefault(); weightRows.splice(idx, 1); renderWeights(); changed(); } }, 'drop') : h('span')));
+  }));
+  const addAssetRow = () => {
+    const free = assetOptions().find((o) => !usedAddrs().includes(o.addr.toLowerCase()));
+    if (!free) { toast('everything on this chain is already in the book'); return; }
+    weightRows.push({ asset: free.addr, sym: free.sym, mn: numIn(5, 5), mx: numIn(25, 25), was: null, added: true });
+    renderWeights(); changed();
+  };
+  const wireSym = h('input', { size: 6, placeholder: 'SYM', style: 'text-transform:uppercase' });
+  const wirePrice = h('input', { type: 'number', step: '0.01', size: 8, placeholder: 'price $' });
+  const wireNote = h('span', { class: 'dim' }, 'a name the chain has not listed yet: it gets a token, a feed and a market, then joins the book');
+  const wireIntoV2 = async () => {
+    const sym = wireSym.value.trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{1,5}$/.test(sym)) { toast('a symbol is 2-6 characters, letters and digits, starting with a letter'); return; }
+    try {
+      const out = await wireAsset(sym, wirePrice.value || 100);
+      weightRows.push({ asset: out.address, sym: out.symbol, mn: numIn(5, 5), mx: numIn(25, 25), was: null, added: true });
+      renderWeights();
+      wireSym.value = ''; wirePrice.value = '';
+      wireNote.textContent = `${out.symbol} is listed — set its band, then send v2.`;
+      changed();
+    } catch (err) { toast('could not list it: ' + err.message); }
+  };
+  const weightTable = h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'asset'), h('th', {}, 'min %'), h('th', {}, 'max %'), h('th', {}, 'now'), h('th', {}, ''))), weightBody);
+  renderWeights();
 
   const diff = h('div', { id: 'diff' });
   const hashOut = h('div', { class: 'mono dim', id: 'newHash' }, 'new spec hash …');
@@ -77,7 +118,7 @@ export async function renderEdit(root, vault) {
   const draftOut = () => ({
     claim: claim.value, falsifier: falsifier.value, exit: exit.value, summary: summary.value, falsCheck: falsCheck.value(),
     signals: sigRows.map((r) => ({ text: r.text.value, check: r.ck.value() })),
-    weights: weightRows.map((w) => ({ min: w.mn.value, max: w.mx.value })),
+    weights: weightRows.map((w) => ({ sym: w.sym, min: w.mn.value, max: w.mx.value })),
   });
 
   const changesOf = () => {
@@ -90,7 +131,10 @@ export async function renderEdit(root, vault) {
     const was = JSON.stringify((d.signals ?? []).map((s) => [lines(s.text), s.check ?? null]));
     const now = JSON.stringify(sigRows.filter((r) => lines(r.text.value)).map((r) => [lines(r.text.value), r.ck.value() ?? null]));
     if (was !== now) out.push('signals');
-    for (const w of weightRows) if (Number(w.mn.value) !== w.was[0] || Number(w.mx.value) !== w.was[1]) out.push(`${w.sym} weight band`);
+    for (const w of weightRows) {
+      if (w.added) out.push(`${w.sym} joins the book (v2 opens a new fund for the bigger book when approved)`);
+      else if (Number(w.mn.value) !== w.was[0] || Number(w.mx.value) !== w.was[1]) out.push(`${w.sym} weight band`);
+    }
     return out;
   };
 
@@ -111,7 +155,7 @@ export async function renderEdit(root, vault) {
       exitRuleHash: wordsSame(exit.value, d.exitRule) ? o.exitRuleHash : keccak(lines(exit.value) || 'term end or falsifier'),
       publishedAt: now, entryUntil: o.entryUntil, termEnd: o.termEnd,
       perfFeeBps: o.perfFeeBps, subFeeBps: o.subFeeBps, redeemFeeBps: o.redeemFeeBps,
-      exposureAssets: [...o.exposureAssets],
+      exposureAssets: weightRows.map((w) => w.asset),
       hardMinWeightBps: weightRows.map((w) => Math.round(Number(w.mn.value) * 100)),
       hardMaxWeightBps: weightRows.map((w) => Math.round(Number(w.mx.value) * 100)),
       allowedCashAssets: [...o.allowedCashAssets], transferPolicy: o.transferPolicy, lockupEnd,
@@ -198,6 +242,10 @@ export async function renderEdit(root, vault) {
   root.appendChild(section('Signals — conditions that fire a rule (the bots watch any with a machine check)',
     sigBox, h('div', { class: 'row' }, h('button', { id: 'addSignal', onclick: (e) => { e.preventDefault(); addSignal(); changed(); } }, '+ signal'))));
   root.appendChild(section('Weights — the hard band each asset may hold', weightTable,
+    h('div', { class: 'row', style: 'margin-top:8px' },
+      h('button', { id: 'addAssetRow', onclick: (e) => { e.preventDefault(); addAssetRow(); } }, '+ another asset'),
+      h('span', { class: 'dim' }, 'from the names on this chain'), wireSym, wirePrice,
+      h('button', { onclick: (e) => { e.preventDefault(); wireIntoV2(); } }, 'list a new one'), wireNote),
     h('p', { class: 'hint' }, 'Term, fees and dates stay as published. The band is re-checked on-chain when v2 is approved.')));
   root.appendChild(section('Send',
     diff, hashOut,
