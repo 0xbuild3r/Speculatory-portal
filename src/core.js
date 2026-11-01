@@ -40,21 +40,33 @@ let publicClient = null, walletClient = null;
 export const wallet = { address: localStorage.getItem('wallet-address') || null };
 export function hasInjected() { return typeof window !== 'undefined' && !!window.ethereum; }
 export async function connectWallet() {
-  if (!hasInjected()) throw new Error('no wallet found in this browser — install MetaMask or Rabby');
+  if (!hasInjected()) throw new Error('no wallet — MetaMask, Rabby, or an in-browser wallet');
   const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-  const chainId = state.chainId ?? 31337;
-  const hex = '0x' + chainId.toString(16);
-  try {
-    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
-  } catch (e) {
-    if (e?.code === 4902 || /unrecognized|not been added/i.test(String(e?.message))) {
-      await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{
-        chainId: hex, chainName: 'Speculatory demo chain', rpcUrls: [state.rpc],
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 } }] });
-    } else throw e;
+  const hex = '0x' + (state.chainId ?? 31337).toString(16);
+  const now = await window.ethereum.request({ method: 'eth_chainId' }).catch(() => null);
+  if (String(now || '').toLowerCase() !== hex) {
+    try {
+      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
+    } catch (e) {
+      const rejected = e?.code === 4001 || /reject/i.test(String(e?.message || ''));
+      if (!rejected) {
+        // switch fails with 4902/-32602 on desktop and code 3 on MetaMask Mobile when the chain is
+        // not in the wallet — ask for the add dialog, and only if that was declined surface the error.
+        const again = await window.ethereum.request({ method: 'eth_chainId' }).catch(() => null);
+        if (String(again || '').toLowerCase() !== hex) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{ chainId: hex, chainName: 'Speculatory demo chain', rpcUrls: [state.rpc], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 } }],
+          });
+          await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] }).catch(() => {});
+        }
+      } else {
+        throw e;
+      }
+    }
   }
-  wallet.address = accounts[0];
-  localStorage.setItem('wallet-address', wallet.address);
+  wallet.address = accounts[0] || null;
+  if (wallet.address) localStorage.setItem('wallet-address', wallet.address);
   IDENTITIES.wallet = { address: wallet.address, label: 'My wallet (' + wallet.address.slice(0, 6) + '…' + wallet.address.slice(-4) + ')', wallet: true };
   return wallet.address;
 }
