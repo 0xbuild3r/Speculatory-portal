@@ -154,7 +154,7 @@ export async function renderEdit(root, vault) {
       falsifierHash: wordsSame(falsifier.value, d.falsifier) ? o.falsifierHash : keccak(lines(falsifier.value)),
       exitRuleHash: wordsSame(exit.value, d.exitRule) ? o.exitRuleHash : keccak(lines(exit.value) || 'term end or falsifier'),
       publishedAt: now, entryUntil: o.entryUntil, termEnd: o.termEnd,
-      perfFeeBps: o.perfFeeBps, subFeeBps: o.subFeeBps, redeemFeeBps: o.redeemFeeBps,
+      perfFeeBps: o.perfFeeBps, serviceFeeBps: o.serviceFeeBps, redeemFeeBps: o.redeemFeeBps,
       exposureAssets: weightRows.map((w) => w.asset),
       hardMinWeightBps: weightRows.map((w) => Math.round(Number(w.mn.value) * 100)),
       hardMaxWeightBps: weightRows.map((w) => Math.round(Number(w.mx.value) * 100)),

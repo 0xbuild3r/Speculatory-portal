@@ -122,7 +122,7 @@ export async function renderNew(root) {
       benchmarkId: keccak(bench.value.trim() || 'SPX'), claimHash: keccak(claim.value.trim()),
       falsifierHash: keccak(falsifier.value.trim()), exitRuleHash: keccak(exit.value.trim() || 'term end or falsifier'),
       publishedAt: now, entryUntil: now + BigInt(Number(entryDays.value) || 365) * DAY, termEnd: now + term,
-      perfFeeBps: Number(perf.value) || 0, subFeeBps: Number(sub.value) || 0, redeemFeeBps: Number(redeem.value) || 0,
+      perfFeeBps: Number(perf.value) || 0, serviceFeeBps: Number(sub.value) || 0, redeemFeeBps: Number(redeem.value) || 0,
       exposureAssets: assets.map((a) => a.addr),
       hardMinWeightBps: assets.map((a) => pct(a.min)), hardMaxWeightBps: assets.map((a) => pct(a.max)),
       allowedCashAssets: [ADDR.usdc], transferPolicy: 1, lockupEnd: now + 90n * DAY,
@@ -172,7 +172,7 @@ export async function renderNew(root) {
         publishedAt: new Date().toISOString().slice(0, 10), horizonDays: Number(termDays.value) || 1095,
         benchmark: bench.value.trim() || 'SPX', summary: summary.value.trim(), claim: claim.value.trim(),
         falsifier: falsifier.value.trim(), exitRule: exit.value.trim() || 'term end, or the falsifier firing.',
-        fees: { performanceBps: Number(perf.value) || 0, subscriptionBps: Number(sub.value) || 0, redemptionBps: Number(redeem.value) || 0, currency: 'USD' },
+        fees: { performanceBps: Number(perf.value) || 0, serviceBps: Number(sub.value) || 0, redemptionBps: Number(redeem.value) || 0, currency: 'USD' },
         exposure: bookRows().filter((a) => a.sym !== 'USDC').map((a) => ({
           symbol: a.sym, minBps: pct(a.min), softMaxBps: pct(a.max), maxBps: pct(a.max), minWeightBps: pct(a.min), maxWeightBps: pct(a.max),
         })),
@@ -218,7 +218,7 @@ export async function renderNew(root) {
   root.appendChild(section('Signals — conditions the bots watch',
     sigBox, h('div', { class: 'row' }, h('button', { id: 'addSignal', onclick: (e) => { e.preventDefault(); addSignal(); changed(); } }, '+ signal'))));
   root.appendChild(section('The terms',
-    h('div', { class: 'row' }, field('benchmark', bench), field('term days', termDays), field('entry window days', entryDays), field('perf fee bps', perf), field('sub fee bps', sub), field('redeem fee bps', redeem)),
+    h('div', { class: 'row' }, field('benchmark', bench), field('term days', termDays), field('entry window days', entryDays), field('perf fee bps', perf), field('service fee bps / year (no entry fee)', sub), field('redeem fee bps', redeem)),
     h('div', { class: 'row' }, field('min formation $', minForm), field('capacity $', capacity)),
     h('label', {}, 'the book — the hard band each asset may hold'), assetList,
     h('div', { class: 'row' }, h('button', { onclick: (e) => { e.preventDefault(); assetList.appendChild(assetRow((assetOptions().find((o) => o.sym !== 'USDC') ?? assetOptions()[0]).sym, '10', '40')); changed(); } }, '+ asset')),
